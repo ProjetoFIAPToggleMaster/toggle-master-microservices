@@ -1,0 +1,15 @@
+[submodule "analytics-service"]
+	path = analytics-service
+	url = https://github.com/ProjetoFIAPToggleMaster/analytics-service.git
+[submodule "auth-service"]
+	path = auth-service
+	url = https://github.com/ProjetoFIAPToggleMaster/auth-service.git
+[submodule "evaluation-service"]
+	path = evaluation-service
+	url = https://github.com/ProjetoFIAPToggleMaster/evaluation-service.git
+[submodule "flag-service"]
+	path = flag-service
+	url = https://github.com/ProjetoFIAPToggleMaster/flag-service.git
+[submodule "targeting-service"]
+	path = targeting-service
+	url = https://github.com/ProjetoFIAPToggleMaster/targeting-service.git
