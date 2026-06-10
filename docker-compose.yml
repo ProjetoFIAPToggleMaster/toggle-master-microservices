@@ -32,6 +32,20 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+  postgres-targeting:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: targeting_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-targeting-data:/var/lib/postgresql/data
+      - ./targeting-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d targeting_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   auth-service:
     build:
@@ -75,10 +89,32 @@ services:
     ports:
       - "8002:8002"
     restart: unless-stopped
+  targeting-service:
+    build:
+      context: ./targeting-service
+    environment:
+      PORT: "8003"
+      DATABASE_URL: "postgres://postgres:postgres@postgres-targeting:5432/targeting_db"
+      AUTH_SERVICE_URL: "http://auth-service:8001"
+    depends_on:
+      postgres-targeting:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    ports:
+      - "8003:8003"
+    restart: unless-stopped
 
 volumes:
   postgres-auth-data:
   postgres_flags_data:
+  postgres-targeting-data:
 
 networks:
   default:
