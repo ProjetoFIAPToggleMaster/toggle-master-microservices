@@ -1,4 +1,6 @@
 services:
+
+# Database services ------------------------------------------------
   postgres-auth:
     image: postgres:15-alpine
     container_name: postgres-auth
@@ -12,10 +14,11 @@ services:
       - postgres-auth-data:/var/lib/postgresql/data
       - ./auth-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5
+
   postgres-flags:
     image: postgres:15-alpine
     environment:
@@ -28,10 +31,11 @@ services:
       - ./targeting-service/db/init.sql:/schemas/targeting-schema.sql
       - postgres_flags_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d flags_db"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d flags_db" ]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 5
+
   postgres-targeting:
     image: postgres:15-alpine
     environment:
@@ -42,10 +46,22 @@ services:
       - postgres-targeting-data:/var/lib/postgresql/data
       - ./targeting-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d targeting_db"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d targeting_db" ]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 5
+
+  redis-evaluation:
+    image: redis:7-alpine
+    volumes:
+      - redis-evaluation-data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+#Application services ------------------------------------------------
 
   auth-service:
     build:
@@ -62,12 +78,13 @@ services:
       postgres-auth:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:8001/health"]
+      test: [ "CMD", "wget", "--spider", "http://localhost:8001/health" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
     restart: unless-stopped
+    
   flag-service:
     build:
       context: ./flag-service
@@ -81,7 +98,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8002/health"]
+      test: [ "CMD", "curl", "-sf", "http://localhost:8002/health" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -89,6 +106,7 @@ services:
     ports:
       - "8002:8002"
     restart: unless-stopped
+
   targeting-service:
     build:
       context: ./targeting-service
@@ -102,7 +120,7 @@ services:
       auth-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8003/health"]
+      test: [ "CMD", "curl", "-sf", "http://localhost:8003/health" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -111,10 +129,36 @@ services:
       - "8003:8003"
     restart: unless-stopped
 
+  evaluation-service:
+    build:
+      context: ./evaluation-service
+    environment:
+      PORT: "8004"
+      REDIS_URL: "redis://localhost:6379"
+    depends_on:
+      redis-evaluation:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      targeting-service:
+        condition: service_healthy
+      flag-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-sf", "http://localhost:8004/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    ports:
+      - "8004:8004"
+    restart: unless-stopped
+
 volumes:
   postgres-auth-data:
   postgres_flags_data:
   postgres-targeting-data:
+  redis-evaluation-data:
 
 networks:
   default:
