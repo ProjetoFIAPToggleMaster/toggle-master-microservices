@@ -154,6 +154,27 @@ services:
       - "8004:8004"
     restart: unless-stopped
 
+  analytics-service:
+    build:
+      context: ./analytics-service
+    environment:
+      PORT: "8005"
+      AWS_REGION: ${AWS_REGION}
+      AWS_SQS_URL: ${AWS_SQS_URL}
+      AWS_DYNAMODB_TABLE: ${AWS_DYNAMODB_TABLE}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN}
+    healthcheck:
+      test: [ "CMD", "curl", "-sf", "http://localhost:8005/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    ports:
+      - "8005:8005"
+    restart: unless-stopped
+
 volumes:
   postgres-auth-data:
   postgres_flags_data:
