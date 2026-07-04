@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: targeting-ingress
+  namespace: targeting
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /rules
+            pathType: Prefix
+            backend:
+              service:
+                name: targeting-service
+                port:
+                  number: 8003

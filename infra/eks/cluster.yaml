@@ -1,0 +1,34 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: toggle-master
+  region: us-east-1
+  version: "1.30"
+
+# Habilita OIDC -> necessário para IRSA (permissoes AWS para analytics e evaluation)
+iam:
+  withOIDC: true
+
+# Sem NAT Gateway = economia principal (~US$32/mes).
+# Os nos ficam em subnet publica (privateNetworking: false) e puxam imagens
+# do ECR pelo Internet Gateway. RDS/ElastiCache continuam em subnet privada.
+vpc:
+  nat:
+    gateway: Disable
+
+addons:
+  - name: vpc-cni
+  - name: coredns
+  - name: kube-proxy
+  - name: metrics-server        # necessario para o HPA funcionar
+
+managedNodeGroups:
+  - name: toggle-nodes
+    instanceType: t3.medium     # 4 GB RAM; t3.small (2GB) fica apertado com 5 apps + ingress
+    amiFamily: AmazonLinux2023
+    minSize: 1
+    desiredCapacity: 2
+    maxSize: 4
+    volumeSize: 20
+    privateNetworking: false    # nos em subnet publica (sem NAT)

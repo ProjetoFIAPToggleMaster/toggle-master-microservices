@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flag-config
+  namespace: flags
+data:
+  PORT: "8002"
+  # DNS interno do auth-service (ClusterIP) usado para validar API keys
+  AUTH_SERVICE_URL: "http://auth-service.auth.svc.cluster.local:8001"

@@ -1,0 +1,7 @@
+# Values do Helm chart ingress-nginx.
+# Usar um values file (em vez de --set com pontos escapados) funciona igual
+# em Linux, macOS e Windows, sem dor de cabeca com aspas/escaping.
+controller:
+  service:
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: nlb

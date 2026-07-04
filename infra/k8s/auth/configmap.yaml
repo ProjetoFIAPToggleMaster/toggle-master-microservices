@@ -1,0 +1,8 @@
+# Dados NAO sensiveis do auth-service (podem ficar no git tranquilamente).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-config
+  namespace: auth
+data:
+  PORT: "8001"

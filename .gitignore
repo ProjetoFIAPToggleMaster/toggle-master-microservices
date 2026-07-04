@@ -1,1 +1,4 @@
 *.env*
+
+# Secrets reais do Kubernetes (mantenha só os *.example.yaml no git)
+infra/k8s/**/secret.yaml
