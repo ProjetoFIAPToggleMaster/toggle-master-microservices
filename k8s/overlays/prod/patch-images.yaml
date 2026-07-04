@@ -9,7 +9,7 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/auth-service:latest
+          image: public.ecr.aws/y3u9h2f0/auth-service:latest
 
 ---
 apiVersion: apps/v1
@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: flag-service
-          image: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/flag-service:latest
+          image: public.ecr.aws/y3u9h2f0/flag-service:latest
 
 ---
 apiVersion: apps/v1
@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
         - name: targeting-service
-          image: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/targeting-service:latest
+          image: public.ecr.aws/y3u9h2f0/targeting-service:latest
 
 ---
 apiVersion: apps/v1
@@ -48,7 +48,7 @@ spec:
     spec:
       containers:
         - name: evaluation-service
-          image: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/evaluation-service:latest
+          image: public.ecr.aws/y3u9h2f0/evaluation-service:latest
 
 ---
 apiVersion: apps/v1
@@ -61,4 +61,4 @@ spec:
     spec:
       containers:
         - name: analytics-service
-          image: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/analytics-service:latest
+          image: public.ecr.aws/y3u9h2f0/analytics-service:latest
