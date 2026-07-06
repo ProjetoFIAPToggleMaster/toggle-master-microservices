@@ -46,16 +46,6 @@ spec:
                 secretKeyRef:
                   name: analytics-secrets
                   key: AWS_SECRET_ACCESS_KEY
-            - name: AWS_SESSION_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: analytics-secrets
-                  key: AWS_SESSION_TOKEN
-            - name: AWS_ENDPOINT_URL
-              valueFrom:
-                secretKeyRef:
-                  name: analytics-secrets
-                  key: AWS_ENDPOINT_URL
           resources:
             requests:
               cpu: "100m"
