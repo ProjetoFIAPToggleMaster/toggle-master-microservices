@@ -9,3 +9,5 @@ resources:
   - evaluation-service.yaml
   - analytics-service.yaml
   - ingress.yaml
+  - hpa-evaluation.yaml
+  - hpa-analytics.yaml
