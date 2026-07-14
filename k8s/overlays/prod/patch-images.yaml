@@ -1,0 +1,64 @@
+# Replace <ACCOUNT_ID> and <REGION> with your real values before deploying
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: toggle-master
+spec:
+  template:
+    spec:
+      containers:
+        - name: auth-service
+          image: public.ecr.aws/y3u9h2f0/auth-service:latest
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flag-service
+  namespace: toggle-master
+spec:
+  template:
+    spec:
+      containers:
+        - name: flag-service
+          image: public.ecr.aws/y3u9h2f0/flag-service:latest
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: targeting-service
+  namespace: toggle-master
+spec:
+  template:
+    spec:
+      containers:
+        - name: targeting-service
+          image: public.ecr.aws/y3u9h2f0/targeting-service:latest
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evaluation-service
+  namespace: toggle-master
+spec:
+  template:
+    spec:
+      containers:
+        - name: evaluation-service
+          image: public.ecr.aws/y3u9h2f0/evaluation-service:latest
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: toggle-master
+spec:
+  template:
+    spec:
+      containers:
+        - name: analytics-service
+          image: public.ecr.aws/y3u9h2f0/analytics-service:latest

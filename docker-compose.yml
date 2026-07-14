@@ -1,0 +1,186 @@
+services:
+
+# Database services ------------------------------------------------
+  postgres-auth:
+    image: postgres:15-alpine
+    container_name: postgres-auth
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+      - ./auth-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-flags:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: flags_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./infra/postgres-flags-init.sh:/docker-entrypoint-initdb.d/00_init.sh
+      - ./flag-service/db/init.sql:/schemas/flags-schema.sql
+      - ./targeting-service/db/init.sql:/schemas/targeting-schema.sql
+      - postgres_flags_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d flags_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-targeting:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: targeting_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-targeting-data:/var/lib/postgresql/data
+      - ./targeting-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d targeting_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-evaluation:
+    image: redis:7-alpine
+    volumes:
+      - redis-evaluation-data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+#Application services ------------------------------------------------
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    ports:
+      - "8001:8001"
+    environment:
+      PORT: 8001
+      DATABASE_URL: postgresql://postgres:postgres123@postgres-auth:5432/auth_db?sslmode=disable
+      MASTER_KEY: admin-secreto-123
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "http://localhost:8001/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    
+  flag-service:
+    build:
+      context: ./flag-service
+    environment:
+      PORT: "8002"
+      DATABASE_URL: "postgres://postgres:postgres@postgres-flags:5432/flags_db"
+      AUTH_SERVICE_URL: "http://auth-service:8001"
+    depends_on:
+      postgres-flags:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-sf", "http://localhost:8002/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
+
+  targeting-service:
+    build:
+      context: ./targeting-service
+    environment:
+      PORT: "8003"
+      DATABASE_URL: "postgres://postgres:postgres@postgres-targeting:5432/targeting_db"
+      AUTH_SERVICE_URL: "http://auth-service:8001"
+    depends_on:
+      postgres-targeting:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-sf", "http://localhost:8003/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    ports:
+      - "8003:8003"
+    restart: unless-stopped
+
+  evaluation-service:
+    build:
+      context: ./evaluation-service
+    environment:
+      PORT: "8004"
+      REDIS_URL: "redis://localhost:6379"
+    depends_on:
+      redis-evaluation:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      targeting-service:
+        condition: service_healthy
+      flag-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-sf", "http://localhost:8004/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    ports:
+      - "8004:8004"
+    restart: unless-stopped
+
+  analytics-service:
+    build:
+      context: ./analytics-service
+    environment:
+      PORT: "8005"
+      AWS_REGION: ${AWS_REGION}
+      AWS_SQS_URL: ${AWS_SQS_URL}
+      AWS_DYNAMODB_TABLE: ${AWS_DYNAMODB_TABLE}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN}
+    healthcheck:
+      test: [ "CMD", "curl", "-sf", "http://localhost:8005/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    ports:
+      - "8005:8005"
+    restart: unless-stopped
+
+volumes:
+  postgres-auth-data:
+  postgres_flags_data:
+  postgres-targeting-data:
+  redis-evaluation-data:
+
+networks:
+  default:
+    name: toggle-network
