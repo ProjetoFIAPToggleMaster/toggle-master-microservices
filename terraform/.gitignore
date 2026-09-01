@@ -1,0 +1,21 @@
+# Terraform
+# .terraform.lock.hcl DEVE ser versionado (fixa os hashes dos providers).
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Variáveis e configs locais com dados sensíveis
+*.tfvars
+!*.tfvars.example
+backend.hcl
+!backend.hcl.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Planos
+*.tfplan
+tfplan

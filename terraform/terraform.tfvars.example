@@ -1,0 +1,17 @@
+# Copie para terraform.tfvars e ajuste conforme o seu ambiente.
+
+# Profile de credenciais AWS (~/.aws/config). Deixe "" para cadeia padrão.
+aws_profile = "COLOQUE_SEU_PROFILE_AQUI"
+
+aws_region   = "us-east-1"
+project_name = "toggle-master"
+environment  = "prod"
+
+# Networking
+vpc_cidr           = "10.0.0.0/16"
+az_count           = 2
+subnet_newbits     = 8
+enable_nat_gateway = true
+single_nat_gateway = true
+
+eks_cluster_name = "toggle-master-eks"
