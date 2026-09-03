@@ -1,0 +1,30 @@
+# ArgoCD Application resource — this is the "control" file, applied directly
+# into the argocd namespace once ArgoCD is installed on the cluster (kubectl apply -f).
+# It is NOT part of what gets deployed to toggle-master — it lives in its own
+# small `argocd/` folder precisely so it never gets mixed up with the actual
+# application manifests ArgoCD is watching (those stay in k8s/overlays/prod).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: toggle-master
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/ProjetoFIAPToggleMaster/toggle-master-microservices.git
+    targetRevision: main
+    path: k8s/overlays/prod
+    # ArgoCD auto-detects the kustomization.yaml here and runs `kustomize build`
+    # itself — no extra config needed to tell it this is a Kustomize folder.
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: toggle-master
+
+  syncPolicy:
+    automated:
+      prune: true # if a resource is removed from git, remove it from the cluster too
+      selfHeal: true # if someone manually kubectl-edits the cluster, revert it back to match git
+    syncOptions:
+      - CreateNamespace=true
