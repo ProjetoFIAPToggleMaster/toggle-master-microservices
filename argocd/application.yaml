@@ -13,7 +13,7 @@ spec:
 
   source:
     repoURL: https://github.com/ProjetoFIAPToggleMaster/toggle-master-microservices.git
-    targetRevision: main
+    targetRevision: master
     path: k8s/overlays/prod
     # ArgoCD auto-detects the kustomization.yaml here and runs `kustomize build`
     # itself — no extra config needed to tell it this is a Kustomize folder.
