@@ -1,0 +1,135 @@
+name: evaluation-service CI/CD
+
+on:
+  pull_request:
+    paths:
+      - 'evaluation-service/**'
+      - '.github/workflows/evaluation-service-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'evaluation-service/**'
+      - '.github/workflows/evaluation-service-ci.yml'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: evaluation-service
+
+env:
+  SERVICE_NAME: evaluation-service
+  GO_VERSION: '1.21'
+
+jobs:
+  build-test:
+    name: Build & Unit Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: go build ./...
+
+      - name: Run unit tests
+        run: go test ./... -v
+
+  lint:
+    name: Linter / Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: evaluation-service
+          args: --timeout=5m
+
+  security-scan:
+    name: Security Scan (SAST & SCA)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      # SCA: scans go.sum for known-vulnerable dependency versions
+      - name: SCA - Trivy filesystem scan (dependency vulnerabilities)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: evaluation-service
+          severity: CRITICAL
+          exit-code: 1
+          format: table
+
+      # SAST: scans our own source code for insecure patterns
+      - name: SAST - gosec (source code vulnerabilities)
+        uses: securego/gosec@master
+        with:
+          args: '-severity high -confidence high ./...'
+
+  docker-build-push:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [build-test, lint, security-scan]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set short commit SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.SERVICE_NAME }}:${{ steps.vars.outputs.sha_short }} .
+
+      - name: Container scan - Trivy image scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.SERVICE_NAME }}:${{ steps.vars.outputs.sha_short }}
+          severity: CRITICAL
+          exit-code: 1
+          format: table
+
+      # --- AWS / ECR push disabled: no AWS account access right now (switching accounts) ---
+      # uncomment this whole block once AWS access is back to resume pushing images to ECR
+      # - name: Configure AWS credentials
+      #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     aws-region: ${{ secrets.AWS_REGION }}
+      #
+      # - name: Login to Amazon ECR
+      #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      #   id: ecr-login
+      #   uses: aws-actions/amazon-ecr-login@v2
+      #
+      # - name: Tag & push image to ECR
+      #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      #   env:
+      #     ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+      #     IMAGE_TAG: v1.0.0-${{ steps.vars.outputs.sha_short }}
+      #   run: |
+      #     docker tag ${{ env.SERVICE_NAME }}:${{ steps.vars.outputs.sha_short }} $ECR_REGISTRY/${{ env.SERVICE_NAME }}:$IMAGE_TAG
+      #     docker push $ECR_REGISTRY/${{ env.SERVICE_NAME }}:$IMAGE_TAG
