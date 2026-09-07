@@ -70,4 +70,4 @@ spec:
     spec:
       containers:
         - name: analytics-service
-          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/analytics-service:v1.0.0-placeholder
+          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/analytics-service:v1.0.0-43ec753
