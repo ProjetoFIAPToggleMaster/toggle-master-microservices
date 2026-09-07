@@ -1,10 +1,8 @@
 # Copie para backend.hcl e preencha com os seus valores.
 # Uso: terraform init -backend-config=backend.hcl
 
-bucket  = "toggle-master-tfstate"
-key     = "networking/terraform.tfstate"
+bucket  = "toggle-master-tfstate-fiap-2026"
+key     = "infra/terraform.tfstate"
 region  = "us-east-1"
 encrypt = true
-
-# Profile de credenciais AWS usado APENAS para acessar o backend.
-profile = "COLOQUE_SEU_PROFILE_AQUI"
+profile = "toggle-master"

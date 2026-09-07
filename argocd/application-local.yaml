@@ -1,0 +1,27 @@
+# TEST-ONLY Application — points at the LocalStack-based overlay instead of prod.
+# Use this to prove the ArgoCD + GitOps mechanism works on minikube, without
+# needing any AWS account access. Delete this file once EKS access is back
+# and argocd/application.yaml (pointing at k8s/overlays/prod) is the real one.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: toggle-master-local
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/ProjetoFIAPToggleMaster/toggle-master-microservices.git
+    targetRevision: master
+    path: k8s/overlays/local
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: toggle-master
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

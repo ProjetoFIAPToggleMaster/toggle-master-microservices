@@ -36,16 +36,10 @@ spec:
                 secretKeyRef:
                   name: analytics-secrets
                   key: AWS_SQS_URL
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: analytics-secrets
-                  key: AWS_ACCESS_KEY_ID
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: analytics-secrets
-                  key: AWS_SECRET_ACCESS_KEY
+            # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY não ficam aqui de
+            # propósito: em produção as credenciais chegam via IRSA (o pod
+            # assume uma role IAM pelo ServiceAccount). O overlay local
+            # adiciona credenciais falsas para o LocalStack.
           resources:
             requests:
               cpu: "100m"

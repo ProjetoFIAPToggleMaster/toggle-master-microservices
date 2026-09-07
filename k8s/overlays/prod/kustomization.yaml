@@ -3,5 +3,7 @@ kind: Kustomization
 resources:
   - ../../base
   - secrets.yaml
+  - serviceaccounts.yaml
 patches:
   - path: patch-images.yaml
+  - path: patch-serviceaccounts.yaml

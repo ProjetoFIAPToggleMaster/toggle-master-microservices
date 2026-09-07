@@ -1,7 +1,7 @@
 # Copie para terraform.tfvars e ajuste conforme o seu ambiente.
 
 # Profile de credenciais AWS (~/.aws/config). Deixe "" para cadeia padrão.
-aws_profile = "COLOQUE_SEU_PROFILE_AQUI"
+aws_profile = "toggle-master"
 
 aws_region   = "us-east-1"
 project_name = "toggle-master"
@@ -15,3 +15,35 @@ enable_nat_gateway = true
 single_nat_gateway = true
 
 eks_cluster_name = "toggle-master-eks"
+
+# ---------------------------------------------------------------------------
+# EKS
+# ---------------------------------------------------------------------------
+kubernetes_version = "1.31"
+
+# Evite t3.micro/t3.small: o limite de pods por node vem do tipo da
+# instância, e as pequenas não comportam os pods de sistema + ingress + os
+# 5 microsserviços (pods ficam presos em Pending com "Too many pods").
+node_instance_types = ["t3.medium"]
+node_capacity_type  = "ON_DEMAND" # SPOT é mais barato, porém interrompível
+node_desired_size   = 2
+node_min_size       = 2
+node_max_size       = 4
+
+# Restrinja ao IP da equipe se quiser fechar o endpoint público da API.
+cluster_public_access_cidrs = ["0.0.0.0/0"]
+
+# ---------------------------------------------------------------------------
+# Data stores
+# ---------------------------------------------------------------------------
+db_instance_class   = "db.t3.micro"   # elegível ao free tier
+redis_node_type     = "cache.t4g.micro"
+dynamodb_table_name = "ToggleMasterAnalytics"
+
+# ---------------------------------------------------------------------------
+# ECR
+# ---------------------------------------------------------------------------
+# IMMUTABLE impede sobrescrever uma tag já publicada. Exige que o CI use
+# tags únicas por commit e NÃO publique "latest" (o segundo push falharia).
+ecr_image_tag_mutability = "IMMUTABLE"
+ecr_max_image_count      = 20

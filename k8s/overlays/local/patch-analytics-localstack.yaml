@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Credenciais falsas + endpoint do LocalStack (somente ambiente local)
+# ---------------------------------------------------------------------------
+# Em produção o analytics-service obtém credenciais via IRSA, então o
+# manifesto base não define AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+#
+# Localmente não existe IRSA: o boto3 ainda precisa de *alguma* credencial
+# para assinar as requisições (o LocalStack aceita qualquer valor), e
+# precisa do AWS_ENDPOINT_URL para falar com o LocalStack em vez da AWS real.
+# Por isso essas três variáveis são adicionadas só aqui, no overlay local.
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: toggle-master
+spec:
+  template:
+    spec:
+      containers:
+        - name: analytics-service
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: analytics-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: analytics-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_ENDPOINT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: analytics-secrets
+                  key: AWS_ENDPOINT_URL

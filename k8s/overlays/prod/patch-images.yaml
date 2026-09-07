@@ -1,4 +1,13 @@
-# Replace <ACCOUNT_ID> and <REGION> with your real values before deploying
+# ---------------------------------------------------------------------------
+# Imagens de produção (ECR privado da conta 567627323809)
+# ---------------------------------------------------------------------------
+# A partir daqui ninguém edita este arquivo à mão: o pipeline de CI de cada
+# serviço reescreve a tag automaticamente (v1.0.0-<sha>) e o ArgoCD aplica a
+# mudança no cluster.
+#
+# A tag "v1.0.0-placeholder" abaixo NÃO existe no ECR ainda. Os pods só vão
+# subir depois que os pipelines publicarem a primeira imagem de verdade.
+# ---------------------------------------------------------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -9,7 +18,7 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: public.ecr.aws/y3u9h2f0/auth-service:latest
+          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/auth-service:v1.0.0-placeholder
 
 ---
 apiVersion: apps/v1
@@ -22,7 +31,7 @@ spec:
     spec:
       containers:
         - name: flag-service
-          image: public.ecr.aws/y3u9h2f0/flag-service:latest
+          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/flag-service:v1.0.0-placeholder
 
 ---
 apiVersion: apps/v1
@@ -35,7 +44,7 @@ spec:
     spec:
       containers:
         - name: targeting-service
-          image: public.ecr.aws/y3u9h2f0/targeting-service:latest
+          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/targeting-service:v1.0.0-placeholder
 
 ---
 apiVersion: apps/v1
@@ -48,7 +57,7 @@ spec:
     spec:
       containers:
         - name: evaluation-service
-          image: public.ecr.aws/y3u9h2f0/evaluation-service:latest
+          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/evaluation-service:v1.0.0-placeholder
 
 ---
 apiVersion: apps/v1
@@ -61,4 +70,4 @@ spec:
     spec:
       containers:
         - name: analytics-service
-          image: public.ecr.aws/y3u9h2f0/analytics-service:latest
+          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/analytics-service:v1.0.0-placeholder
