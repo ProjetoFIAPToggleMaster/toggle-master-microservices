@@ -2,8 +2,21 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
-  - secrets.yaml
   - serviceaccounts.yaml
+# secrets.yaml NAO entra aqui de proposito: o arquivo e gitignored (contem
+# senhas reais do RDS), e o ArgoCD le do GitHub, nao do disco local. Se
+# estivesse listado, o `kustomize build` do ArgoCD falharia com "file not
+# found" e nada seria implantado.
+#
+# Aplique os secrets manualmente, uma vez:
+#   kubectl apply -f k8s/overlays/prod/secrets.yaml
+#
+# O ArgoCD nao remove esses secrets no prune: ele so remove recursos que ele
+# mesmo criou (identificados por label de tracking), e estes foram criados
+# fora dele.
+#
+# Solucao definitiva (fora do escopo agora): External Secrets Operator lendo
+# direto do AWS Secrets Manager, eliminando o passo manual.
 patches:
   - path: patch-images.yaml
   - path: patch-serviceaccounts.yaml

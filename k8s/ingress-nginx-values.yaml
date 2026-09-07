@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# Valores do Helm chart do ingress-nginx
+# ---------------------------------------------------------------------------
+# Uso:
+#   helm install ingress-nginx ingress-nginx/ingress-nginx \
+#     --namespace ingress-nginx --create-namespace \
+#     -f k8s/ingress-nginx-values.yaml
+#
+# Arquivo de valores em vez de vários --set: as anotações têm pontos no nome
+# e escapá-las na linha de comando do PowerShell é fonte garantida de erro.
+# ---------------------------------------------------------------------------
+controller:
+  service:
+    annotations:
+      # NLB em vez do Classic Load Balancer (padrão do provider antigo):
+      # mais barato, menor latência e é o tipo recomendado pela AWS hoje.
+      service.beta.kubernetes.io/aws-load-balancer-type: nlb
+      # Load balancer voltado para a internet — é a porta de entrada pública
+      # dos 5 microsserviços.
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+
+  # Duas réplicas: o controller é ponto único de entrada de todo o tráfego,
+  # então uma réplica só significaria indisponibilidade total durante um
+  # rollout ou a perda de um node.
+  replicaCount: 2
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
