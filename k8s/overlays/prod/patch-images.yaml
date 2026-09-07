@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
         - name: flag-service
-          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/flag-service:v1.0.0-placeholder
+          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/flag-service:v1.0.0-4288cb0
 
 ---
 apiVersion: apps/v1
