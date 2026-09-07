@@ -44,7 +44,7 @@ spec:
     spec:
       containers:
         - name: targeting-service
-          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/targeting-service:v1.0.0-placeholder
+          image: 567627323809.dkr.ecr.us-east-1.amazonaws.com/targeting-service:v1.0.0-1d35e9d
 
 ---
 apiVersion: apps/v1
