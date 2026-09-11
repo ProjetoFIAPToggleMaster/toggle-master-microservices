@@ -59,6 +59,17 @@ variable "reconciliation_timeout" {
   default     = "30s"
 }
 
+variable "reconciliation_jitter" {
+  description = <<-EOT
+    Atraso aleatório somado ao intervalo de polling. O chart traz 60s por
+    padrão, o que faria o sync levar de 30s a 90s de forma imprevisível na
+    gravação. O jitter só é útil para espalhar o polling de muitas
+    Applications; com uma só, zerar deixa a demonstração previsível.
+  EOT
+  type        = string
+  default     = "0s"
+}
+
 variable "server_service_type" {
   description = <<-EOT
     Tipo do Service do argocd-server.

@@ -44,6 +44,12 @@ resource "helm_release" "argocd" {
         # Intervalo de polling do Git. O padrão do ArgoCD é 3 minutos — tempo
         # demais para demonstrar o sync automático na gravação do vídeo.
         "timeout.reconciliation" = var.reconciliation_timeout
+
+        # O chart traz jitter de 60s por padrão, somado ao intervalo acima:
+        # o sync levaria de 30s a 90s, de forma imprevisível. O jitter serve
+        # para espalhar o polling de MUITAS Applications e evitar pico de
+        # carga; com uma só, ele apenas torna a demonstração lenta e errática.
+        "timeout.reconciliation.jitter" = var.reconciliation_jitter
       }
       params = {
         # Com true, o argocd-server serve HTTP puro. Necessário APENAS se a UI
