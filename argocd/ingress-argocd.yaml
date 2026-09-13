@@ -1,0 +1,31 @@
+# Ingress da UI do ArgoCD — alternativa ao `kubectl port-forward`.
+#
+# Vive em argocd/ (e não em k8s/) de propósito: esta pasta NÃO é observada por
+# nenhuma Application, então o ArgoCD nunca tenta gerenciar a própria interface.
+#
+# PRÉ-REQUISITO: o argocd-server precisa estar em modo HTTP, senão o nginx
+# encaminha HTTP para uma porta TLS e você toma 502 ou redirect infinito:
+#
+#   kubectl -n argocd patch configmap argocd-cmd-params-cm --type merge -p '{"data":{"server.insecure":"true"}}'
+#   kubectl -n argocd rollout restart deployment argocd-server
+#
+# Depois: aponte argocd.local para 127.0.0.1 no arquivo hosts e rode
+# `minikube tunnel`. Passo a passo completo em k8s/ARGOCD.md (passo 7c).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server-ingress
+  namespace: argocd
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: argocd.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80
