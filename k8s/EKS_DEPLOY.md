@@ -6,14 +6,24 @@
 
 Create these AWS resources **before** deploying. All must be in the **same VPC as your EKS cluster**.
 
-### RDS — 3 Postgres Databases
-Console → RDS → Create Database → PostgreSQL 15 → note each endpoint URL.
+### RDS — 2 instâncias, 3 bancos lógicos
 
-| Database | Used by |
-|----------|---------|
-| `auth_db` | auth-service |
-| `flags_db` | flag-service |
-| `targeting_db` | targeting-service |
+Provisionado pelo Terraform (`terraform/modules/data`), não pelo Console.
+
+São **duas** instâncias por decisão de custo: `flag-service` e `targeting-service`
+compartilham a mesma instância, com bancos lógicos separados. O isolamento de
+schema é preservado.
+
+| Instância RDS | Banco | Usado por |
+|---------------|-------|-----------|
+| `auth` | `auth_db` | auth-service |
+| `flags` | `flags_db` | flag-service |
+| `flags` | `targeting_db` | targeting-service |
+
+> A instância `flags` nasce apenas com `flags_db`. O `targeting_db` **não existe**
+> até ser criado à mão — ver o passo *Initialize RDS Schemas*.
+
+Endpoints: `terraform -chdir=terraform output rds_addresses`
 
 ### ElastiCache — Redis
 Console → ElastiCache → Create → Redis → note endpoint URL.
@@ -161,14 +171,21 @@ Generate base64 in PowerShell:
 | auth-secrets | DATABASE_URL | `postgresql://postgres:<pw>@<RDS_AUTH_ENDPOINT>:5432/auth_db?sslmode=require` |
 | auth-secrets | MASTER_KEY | your master key |
 | flag-secrets | DATABASE_URL | `postgres://postgres:<pw>@<RDS_FLAGS_ENDPOINT>:5432/flags_db` |
-| targeting-secrets | DATABASE_URL | `postgres://postgres:<pw>@<RDS_TARGETING_ENDPOINT>:5432/targeting_db` |
+| targeting-secrets | DATABASE_URL | `postgres://postgres:<pw>@<RDS_FLAGS_ENDPOINT>:5432/targeting_db` |
 | evaluation-secrets | REDIS_URL | `redis://<ELASTICACHE_ENDPOINT>:6379` |
 | evaluation-secrets | AWS_SQS_URL | full SQS queue URL |
 | evaluation-secrets | SERVICE_API_KEY | fill after step 10 |
-| analytics-secrets | AWS_ACCESS_KEY_ID | your AWS key |
-| analytics-secrets | AWS_SECRET_ACCESS_KEY | your AWS secret |
-| analytics-secrets | AWS_SESSION_TOKEN | your session token |
 | analytics-secrets | AWS_SQS_URL | full SQS queue URL |
+
+> **Não coloque `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` nem
+> `AWS_SESSION_TOKEN` em Secret nenhum.** `evaluation-service` e
+> `analytics-service` obtêm credenciais AWS por **IRSA**: o ServiceAccount é
+> anotado com a role (ver `serviceaccounts.yaml`) e o EKS injeta credenciais
+> temporárias, rotacionadas pela própria AWS.
+>
+> Chave estática aqui seria uma regressão — é exatamente a prática que o
+> desafio pede para eliminar. ARNs das roles:
+> `terraform -chdir=terraform output irsa_role_arns`
 
 > **Do NOT add `AWS_ENDPOINT_URL` to prod secrets** — that is local only. Prod points to real AWS.
 
@@ -187,15 +204,43 @@ image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/auth-service:latest
 
 ## Step 8 — Initialize RDS Schemas
 
-RDS databases start empty. Run the init scripts once against each database.
+Os bancos nascem vazios. Rode os scripts uma única vez.
 
-```powershell
-psql postgresql://postgres:<pw>@<RDS_AUTH_ENDPOINT>:5432/auth_db -f auth-service/db/init.sql
-psql postgresql://postgres:<pw>@<RDS_FLAGS_ENDPOINT>:5432/flags_db -f flag-service/db/init.sql
-psql postgresql://postgres:<pw>@<RDS_TARGETING_ENDPOINT>:5432/targeting_db -f targeting-service/db/init.sql
+> **Não dá para rodar `psql` da sua máquina.** As instâncias sobem com
+> `publicly_accessible = false`, em subnets privadas — só são alcançáveis de
+> dentro da VPC. Use um pod temporário no cluster, com `-i` para enviar o
+> arquivo `.sql` pela entrada padrão.
+>
+> O RDS Query Editor do Console **não serve**: ele só suporta Aurora
+> Serverless, não RDS PostgreSQL padrão.
+
+**1. auth_db** (instância `auth`):
+
+```bash
+kubectl run psql-tmp -i --rm --restart=Never -n toggle-master --image=postgres:15-alpine -- psql "postgresql://postgres:<pw>@<RDS_AUTH_ENDPOINT>:5432/auth_db" < auth-service/db/init.sql
 ```
 
-If you don't have psql locally, use the AWS RDS Query Editor in the Console.
+**2. flags_db** (instância `flags`):
+
+```bash
+kubectl run psql-tmp -i --rm --restart=Never -n toggle-master --image=postgres:15-alpine -- psql "postgresql://postgres:<pw>@<RDS_FLAGS_ENDPOINT>:5432/flags_db" < flag-service/db/init.sql
+```
+
+**3. targeting_db** — precisa ser **criado** antes, porque a instância `flags`
+nasce só com `flags_db`:
+
+```bash
+kubectl run psql-tmp -i --rm --restart=Never -n toggle-master --image=postgres:15-alpine -- psql "postgresql://postgres:<pw>@<RDS_FLAGS_ENDPOINT>:5432/flags_db" -c "CREATE DATABASE targeting_db;"
+```
+
+E só então carregue o schema nele:
+
+```bash
+kubectl run psql-tmp -i --rm --restart=Never -n toggle-master --image=postgres:15-alpine -- psql "postgresql://postgres:<pw>@<RDS_FLAGS_ENDPOINT>:5432/targeting_db" < targeting-service/db/init.sql
+```
+
+Senhas: `terraform -chdir=terraform output rds_master_secret_arns`, depois
+`aws secretsmanager get-secret-value --secret-id <ARN> --query SecretString --output text`.
 
 ---
 
