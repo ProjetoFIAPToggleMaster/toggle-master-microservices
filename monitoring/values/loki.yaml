@@ -1,0 +1,90 @@
+# ---------------------------------------------------------------------------
+# Loki — centralização dos logs dos contêineres
+# ---------------------------------------------------------------------------
+# Chart: grafana/loki (versão fixada em argocd/monitoring/loki.yaml)
+#
+# Modo SingleBinary: um único pod faz tudo (ingest, query, compactação).
+# O modo padrão do chart (SimpleScalable) sobe ~10 pods e exige object
+# storage (S3) — demais para o volume de logs deste projeto.
+#
+# Quem ENVIA os logs para cá é o OTel Collector (Fase 2), pelo endpoint
+# OTLP nativo do Loki: http://loki.monitoring:3100/otlp
+#
+# Sem persistência: o cluster não tem o driver EBS CSI, então PVC não sobe.
+# Os logs ficam em emptyDir e somem se o pod reiniciar — aceitável para a
+# demonstração.
+# ---------------------------------------------------------------------------
+deploymentMode: SingleBinary
+
+loki:
+  # Sem multi-tenancy: um único "tenant" implícito, sem header X-Scope-OrgID.
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  storage:
+    type: filesystem
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  limits_config:
+    # Necessário para a ingestão OTLP: os atributos que não viram label
+    # (ex.: trace_id) são guardados como "structured metadata".
+    allow_structured_metadata: true
+    volume_enabled: true
+    retention_period: 48h
+
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: false
+  extraVolumes:
+    - name: data
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: data
+      mountPath: /var/loki
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# Os componentes do modo SimpleScalable ficam zerados.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Gateway (nginx na frente do Loki) é útil com vários componentes; com um
+# único binário o Grafana e o Collector falam direto com o serviço "loki".
+gateway:
+  enabled: false
+
+# Caches em memcached: ganho irrelevante neste volume e ~2 GiB de RAM a menos.
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+
+# Pods de teste/canário do chart — só barulho no cluster.
+lokiCanary:
+  enabled: false
+test:
+  enabled: false

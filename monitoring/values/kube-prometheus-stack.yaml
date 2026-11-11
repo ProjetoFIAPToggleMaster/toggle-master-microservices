@@ -1,0 +1,118 @@
+# ---------------------------------------------------------------------------
+# kube-prometheus-stack — Prometheus + Grafana + exporters do cluster
+# ---------------------------------------------------------------------------
+# Chart: prometheus-community/kube-prometheus-stack
+# (versão fixada em argocd/monitoring/kube-prometheus-stack.yaml)
+#
+# O que este chart sobe:
+#   - Prometheus Operator + Prometheus  -> métricas
+#   - kube-state-metrics                -> estado dos objetos (pods, HPA, ...)
+#   - node-exporter (DaemonSet)         -> CPU/memória/disco dos nodes
+#   - Grafana                           -> visualização (datasources Prometheus + Loki)
+#
+# Sem persistência: o cluster não tem driver EBS CSI. Tudo em emptyDir.
+#
+# Acesso ao Grafana:
+#   kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+#   usuário admin / senha: kubectl -n monitoring get secret kube-prometheus-stack-grafana \
+#     -o jsonpath="{.data.admin-password}" | base64 -d
+# ---------------------------------------------------------------------------
+
+# Nome curto e previsível para os recursos (svc/kube-prometheus-stack-*).
+fullnameOverride: kube-prometheus-stack
+
+# Alertas ficam no Grafana (Fase 4) — um único sistema de alerta, não dois.
+alertmanager:
+  enabled: false
+
+# O EKS gerencia o control plane: não há como coletar métricas de
+# etcd/scheduler/controller-manager, e os alvos ficariam "down" para sempre.
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    # O OTel Collector (Fase 2) envia as métricas das aplicações para cá via
+    # remote write: POST /api/v1/write
+    enableRemoteWriteReceiver: true
+
+    retention: 2d
+
+    # Por padrão o Prometheus só lê ServiceMonitors/PodMonitors/regras
+    # criados por ESTE release. Com false, ele lê de todos os namespaces —
+    # é o que permite pegar o ServiceMonitor do ingress-nginx.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1536Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+grafana:
+  # Datasource do Prometheus é criado automaticamente pelo chart (default).
+  # O Loki entra como datasource adicional, com uid fixo para os dashboards.
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki.monitoring:3100
+      access: proxy
+      jsonData:
+        maxLines: 1000
+
+  # Sidecar que carrega dashboards de ConfigMaps com o label
+  # grafana_dashboard: "1" em qualquer namespace. É assim que o dashboard
+  # customizado (monitoring/manifests/) entra via GitOps.
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+    datasources:
+      # O chart cria um datasource "Alertmanager" mesmo com o Alertmanager
+      # desligado — ficaria apontando para um serviço que não existe e
+      # confundindo a tela de alertas do Grafana (Fase 4).
+      alertmanager:
+        enabled: false
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi

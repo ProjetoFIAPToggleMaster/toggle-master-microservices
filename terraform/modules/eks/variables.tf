@@ -73,9 +73,12 @@ variable "node_instance_types" {
     instância: t3.micro suporta ~4 pods e t3.small ~11 — insuficiente depois
     de somar os pods de sistema (CoreDNS, kube-proxy, aws-node), o ingress
     controller e os 5 microsserviços. t3.medium suporta ~17 pods por node.
+    Na Fase 4 o padrão passou a t3.large (8 GiB, ~35 pods por node): a stack
+    de observabilidade (Prometheus, Loki, Grafana, OTel Collector) não cabe
+    junto com a aplicação em 2× t3.medium.
   EOT
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.large"]
 }
 
 variable "node_capacity_type" {
