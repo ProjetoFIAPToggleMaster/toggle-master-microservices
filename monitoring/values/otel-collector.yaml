@@ -36,7 +36,7 @@ config:
     zipkin: null
 
   connectors:
-    spanmetrics:
+    span_metrics:
       namespace: traces.span.metrics
       histogram:
         unit: s
@@ -52,14 +52,12 @@ config:
           pattern: ^k8s\.(pod|replicaset|daemonset|statefulset|job|cluster)\.uid$
         - action: delete
           key: k8s.pod.start_time
-        - action: delete
-          key: container.image.tag
 
   exporters:
-    prometheusremotewrite:
+    prometheus_remote_write:
       endpoint: http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1/write
-      resource_to_telemetry_conversion:
-        enabled: true
+      resource_constant_labels:
+        included: ["*"]
     otlp_http/loki:
       endpoint: http://loki.monitoring:3100/otlp
 
@@ -68,11 +66,11 @@ config:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, k8s_attributes, batch]
-        exporters: [debug, spanmetrics]
+        exporters: [debug, span_metrics]
       metrics:
-        receivers: [otlp, spanmetrics, prometheus]
+        receivers: [otlp, span_metrics, prometheus]
         processors: [memory_limiter, k8s_attributes, resource/drop-high-cardinality, batch]
-        exporters: [prometheusremotewrite]
+        exporters: [prometheus_remote_write]
       logs:
         receivers: [otlp]
         processors: [memory_limiter, k8s_attributes, batch]
