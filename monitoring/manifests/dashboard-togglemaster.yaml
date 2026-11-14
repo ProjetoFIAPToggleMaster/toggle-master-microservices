@@ -651,6 +651,329 @@ data:
               "expr": "{k8s_namespace_name=\"toggle-master\", service_name=~\"$service\"} |= \"$search\""
             }
           ]
+        },
+        {
+          "id": 18,
+          "type": "row",
+          "title": "Roteamento pelo OTel Collector",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 61
+          },
+          "panels": []
+        },
+        {
+          "id": 19,
+          "type": "timeseries",
+          "title": "Collector — recebido por sinal",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 9,
+            "x": 0,
+            "y": 62
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "cps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(otelcol_receiver_accepted_log_records_total[1m]))",
+              "legendFormat": "logs"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(otelcol_receiver_accepted_metric_points_total[1m]))",
+              "legendFormat": "métricas (pontos)"
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(otelcol_receiver_accepted_spans_total[1m]))",
+              "legendFormat": "traces (spans)"
+            }
+          ]
+        },
+        {
+          "id": 20,
+          "type": "timeseries",
+          "title": "Collector — enviado por destino",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 9,
+            "x": 9,
+            "y": 62
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "cps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (exporter) (rate(otelcol_exporter_sent_log_records_total[1m]))",
+              "legendFormat": "logs → {{exporter}}"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (exporter) (rate(otelcol_exporter_sent_metric_points_total[1m]))",
+              "legendFormat": "métricas → {{exporter}}"
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (exporter) (rate(otelcol_exporter_sent_spans_total[1m]))",
+              "legendFormat": "traces → {{exporter}}"
+            }
+          ]
+        },
+        {
+          "id": 21,
+          "type": "stat",
+          "title": "Collector — falhas de envio (5m)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 18,
+            "y": 62
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(increase({__name__=~\"otelcol_exporter_send_failed_(log_records|metric_points|spans)_total\"}[5m])) or vector(0)"
+            }
+          ]
+        },
+        {
+          "id": 22,
+          "type": "timeseries",
+          "title": "Requisições/s por serviço (OTel)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 70
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\",service_name=~\"$service\"}[1m]))",
+              "legendFormat": "{{service_name}}"
+            }
+          ]
+        },
+        {
+          "id": 23,
+          "type": "timeseries",
+          "title": "Taxa de erro 5xx por serviço (OTel)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 70
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "(sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\",service_name=~\"$service\",http_response_status_code=~\"5..\"}[1m])) or 0 * sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\",service_name=~\"$service\"}[1m]))) / (sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\",service_name=~\"$service\"}[1m])) > 0)",
+              "legendFormat": "{{service_name}}"
+            }
+          ]
+        },
+        {
+          "id": 24,
+          "type": "timeseries",
+          "title": "Latência p95 por serviço (OTel)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 70
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le, service_name) (rate(traces_span_metrics_duration_seconds_bucket{span_kind=\"SPAN_KIND_SERVER\",service_name=~\"$service\"}[5m])))",
+              "legendFormat": "{{service_name}}"
+            }
+          ]
         }
       ]
     }
