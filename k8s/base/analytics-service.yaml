@@ -18,7 +18,12 @@ spec:
           image: toggle-master/analytics-service:latest
           ports:
             - containerPort: 8005
+          envFrom:
+            - configMapRef:
+                name: toggle-config
           env:
+            - name: OTEL_SERVICE_NAME
+              value: "analytics-service"
             - name: PORT
               value: "8005"
             - name: AWS_REGION

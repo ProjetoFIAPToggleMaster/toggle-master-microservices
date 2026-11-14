@@ -1,0 +1,7 @@
+# O cluster local não roda a stack de monitoramento: desliga o SDK para os
+# serviços não ficarem tentando enviar para o collector.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: toggle-config
+  namespace: toggle-master

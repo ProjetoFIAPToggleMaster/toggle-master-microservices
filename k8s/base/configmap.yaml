@@ -9,3 +9,8 @@ data:
   TARGETING_SERVICE_URL: "http://targeting-service:8003"
   AWS_REGION: "us-east-1"
   AWS_DYNAMODB_TABLE: "ToggleMasterAnalytics"
+  # OpenTelemetry: os pods enviam OTLP/HTTP ao collector (namespace monitoring).
+  # O collector encaminha para Datadog, Prometheus e Loki.
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.monitoring:4318"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+  OTEL_PYTHON_LOG_CORRELATION: "true"

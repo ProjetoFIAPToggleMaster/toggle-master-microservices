@@ -1,0 +1,8 @@
+# Tags de ambiente do OpenTelemetry (unified service tagging do Datadog).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: toggle-config
+  namespace: toggle-master
+data:
+  OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=prod"
