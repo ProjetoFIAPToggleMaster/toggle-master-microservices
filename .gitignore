@@ -3,3 +3,4 @@
 # Secrets de produção preenchidos com valores reais (endpoints RDS, senhas,
 # chaves de API). NUNCA versionar.
 k8s/overlays/prod/secrets.yaml
+monitoring/secrets.yaml
