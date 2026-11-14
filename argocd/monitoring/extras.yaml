@@ -1,0 +1,28 @@
+# ArgoCD Application — peças próprias da stack de monitoramento
+#
+# Manifests simples (kustomize) em monitoring/manifests/:
+#   - dashboard customizado do Grafana (ConfigMap lido pelo sidecar)
+#   - self-healer (Fase 4)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-extras
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/ProjetoFIAPToggleMaster/toggle-master-microservices.git
+    targetRevision: master
+    path: monitoring/manifests
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -24,7 +24,8 @@ kubernetes_version = "1.31"
 # Evite t3.micro/t3.small: o limite de pods por node vem do tipo da
 # instância, e as pequenas não comportam os pods de sistema + ingress + os
 # 5 microsserviços (pods ficam presos em Pending com "Too many pods").
-node_instance_types = ["t3.medium"]
+# t3.large desde a Fase 4: a stack de observabilidade precisa de memória.
+node_instance_types = ["t3.large"]
 node_capacity_type  = "ON_DEMAND" # SPOT é mais barato, porém interrompível
 node_desired_size   = 2
 node_min_size       = 2

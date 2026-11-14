@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-otel-collector
+  namespace: argocd
+spec:
+  project: default
+
+  sources:
+    - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+      chart: opentelemetry-collector
+      targetRevision: 0.178.3
+      helm:
+        releaseName: otel-collector
+        valueFiles:
+          - $values/monitoring/values/otel-collector.yaml
+    - repoURL: https://github.com/ProjetoFIAPToggleMaster/toggle-master-microservices.git
+      targetRevision: master
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

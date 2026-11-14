@@ -1,0 +1,77 @@
+mode: daemonset
+fullnameOverride: otel-collector
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+presets:
+  logsCollection:
+    enabled: true
+  kubernetesAttributes:
+    enabled: true
+
+service:
+  enabled: true
+
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+
+  connectors:
+    span_metrics:
+      namespace: traces.span.metrics
+      histogram:
+        unit: s
+      dimensions:
+        - name: http.request.method
+        - name: http.response.status_code
+      metrics_flush_interval: 15s
+
+  processors:
+    resource/drop-high-cardinality:
+      attributes:
+        - action: delete
+          pattern: ^k8s\.(pod|replicaset|daemonset|statefulset|job|cluster)\.uid$
+        - action: delete
+          key: k8s.pod.start_time
+
+  exporters:
+    prometheus_remote_write:
+      endpoint: http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1/write
+      resource_constant_labels:
+        included: ["*"]
+    otlp_http/loki:
+      endpoint: http://loki.monitoring:3100/otlp
+
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, k8s_attributes, batch]
+        exporters: [debug, span_metrics]
+      metrics:
+        receivers: [otlp, span_metrics, prometheus]
+        processors: [memory_limiter, k8s_attributes, resource/drop-high-cardinality, batch]
+        exporters: [prometheus_remote_write]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, k8s_attributes, batch]
+        exporters: [otlp_http/loki]

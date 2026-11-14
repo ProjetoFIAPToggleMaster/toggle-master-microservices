@@ -155,10 +155,11 @@ variable "node_instance_types" {
     Tipos de instância dos nodes. Evite t3.micro/t3.small: o limite de pods
     por node é derivado do tipo da instância e instâncias pequenas não
     comportam os pods de sistema + ingress + 5 microsserviços, resultando em
-    pods presos em Pending com "Too many pods".
+    pods presos em Pending com "Too many pods". t3.large desde a Fase 4, para
+    caber a stack de observabilidade (Prometheus, Loki, Grafana, OTel).
   EOT
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.large"]
 }
 
 variable "node_capacity_type" {

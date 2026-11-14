@@ -1,0 +1,979 @@
+# Dashboard customizado do Grafana, versionado no Git.
+# O sidecar do Grafana (kube-prometheus-stack) carrega qualquer ConfigMap com o
+# label grafana_dashboard: "1". Para alterar: edite no Grafana, exporte o JSON
+# (Share -> Export) e cole aqui — não edite só pela UI, o Git é a fonte.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-togglemaster
+  labels:
+    grafana_dashboard: "1"
+data:
+  togglemaster-overview.json: |
+    {
+      "uid": "togglemaster-overview",
+      "title": "ToggleMaster — Saúde do Ecossistema",
+      "tags": [
+        "togglemaster"
+      ],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "refresh": "10s",
+      "time": {
+        "from": "now-30m",
+        "to": "now"
+      },
+      "templating": {
+        "list": [
+          {
+            "name": "service",
+            "label": "Serviço",
+            "type": "custom",
+            "multi": true,
+            "includeAll": true,
+            "allValue": ".+",
+            "query": "auth-service,flag-service,targeting-service,evaluation-service,analytics-service",
+            "current": {
+              "text": "All",
+              "value": "$__all"
+            }
+          },
+          {
+            "name": "search",
+            "label": "Buscar no log",
+            "type": "textbox",
+            "query": "",
+            "current": {
+              "text": "",
+              "value": ""
+            }
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "row",
+          "title": "Cluster",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Nodes prontos",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 1
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(kube_node_status_condition{condition=\"Ready\",status=\"true\"})"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "CPU do cluster",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 1
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Memória do cluster",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 1
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "1 - sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes)"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Pods toggle-master rodando",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 1
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(kube_pod_status_phase{namespace=\"toggle-master\",phase=\"Running\"})"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "CPU por node",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 5
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Memória por node",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 5
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "CPU por pod (toggle-master)",
+          "description": "Soma por contêiner (EKS). O 'or' cai para a série do cgroup do pod quando o runtime não expõe contêineres (minikube com driver docker).",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 13
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "cores"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"toggle-master\",container!=\"\"}[5m])) or sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"toggle-master\",container=\"\"}[5m]))",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Memória por pod (toggle-master)",
+          "description": "Soma por contêiner (EKS). O 'or' cai para a série do cgroup do pod quando o runtime não expõe contêineres (minikube com driver docker).",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 13
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"toggle-master\",container!=\"\"}) or sum by (pod) (container_memory_working_set_bytes{namespace=\"toggle-master\",container=\"\"})",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Restarts de contêiner (última hora)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 21
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"toggle-master\"}[1h]))",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "Réplicas do HPA",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 21
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"toggle-master\"}",
+              "legendFormat": "{{horizontalpodautoscaler}} atual"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"toggle-master\"}",
+              "legendFormat": "{{horizontalpodautoscaler}} máx"
+            }
+          ]
+        },
+        {
+          "id": 12,
+          "type": "row",
+          "title": "Requisições dos microsserviços (ingress-nginx)",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 29
+          },
+          "panels": []
+        },
+        {
+          "id": 13,
+          "type": "timeseries",
+          "title": "Requisições/s por serviço",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 30
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (exported_service) (rate(nginx_ingress_controller_requests{exported_namespace=\"toggle-master\"}[1m]))",
+              "legendFormat": "{{exported_service}}"
+            }
+          ]
+        },
+        {
+          "id": 14,
+          "type": "timeseries",
+          "title": "Taxa de erro 5xx por serviço",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 30
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "(sum by (exported_service) (rate(nginx_ingress_controller_requests{exported_namespace=\"toggle-master\",status=~\"5..\"}[1m])) or 0 * sum by (exported_service) (rate(nginx_ingress_controller_requests{exported_namespace=\"toggle-master\"}[1m]))) / (sum by (exported_service) (rate(nginx_ingress_controller_requests{exported_namespace=\"toggle-master\"}[1m])) > 0)",
+              "legendFormat": "{{exported_service}}"
+            }
+          ]
+        },
+        {
+          "id": 15,
+          "type": "timeseries",
+          "title": "Latência p95 por serviço",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 38
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le, exported_service) (rate(nginx_ingress_controller_request_duration_seconds_bucket{exported_namespace=\"toggle-master\"}[5m])))",
+              "legendFormat": "{{exported_service}}"
+            }
+          ]
+        },
+        {
+          "id": 16,
+          "type": "row",
+          "title": "Logs em tempo real (Loki)",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 46
+          },
+          "panels": []
+        },
+        {
+          "id": 17,
+          "type": "logs",
+          "title": "Logs — $service",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "h": 14,
+            "w": 24,
+            "x": 0,
+            "y": 47
+          },
+          "options": {
+            "showTime": true,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending",
+            "enableLogDetails": true
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "expr": "{k8s_namespace_name=\"toggle-master\", service_name=~\"$service\"} |= \"$search\""
+            }
+          ]
+        },
+        {
+          "id": 18,
+          "type": "row",
+          "title": "Roteamento pelo OTel Collector",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 61
+          },
+          "panels": []
+        },
+        {
+          "id": 19,
+          "type": "timeseries",
+          "title": "Collector — recebido por sinal",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 9,
+            "x": 0,
+            "y": 62
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "cps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(otelcol_receiver_accepted_log_records_total[1m]))",
+              "legendFormat": "logs"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(otelcol_receiver_accepted_metric_points_total[1m]))",
+              "legendFormat": "métricas (pontos)"
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(otelcol_receiver_accepted_spans_total[1m]))",
+              "legendFormat": "traces (spans)"
+            }
+          ]
+        },
+        {
+          "id": 20,
+          "type": "timeseries",
+          "title": "Collector — enviado por destino",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 9,
+            "x": 9,
+            "y": 62
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "cps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (exporter) (rate(otelcol_exporter_sent_log_records_total[1m]))",
+              "legendFormat": "logs → {{exporter}}"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (exporter) (rate(otelcol_exporter_sent_metric_points_total[1m]))",
+              "legendFormat": "métricas → {{exporter}}"
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (exporter) (rate(otelcol_exporter_sent_spans_total[1m]))",
+              "legendFormat": "traces → {{exporter}}"
+            }
+          ]
+        },
+        {
+          "id": 21,
+          "type": "stat",
+          "title": "Collector — falhas de envio (5m)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 18,
+            "y": 62
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(increase({__name__=~\"otelcol_exporter_send_failed_(log_records|metric_points|spans)_total\"}[5m])) or vector(0)"
+            }
+          ]
+        },
+        {
+          "id": 22,
+          "type": "timeseries",
+          "title": "Requisições/s por serviço (OTel)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 70
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\",service_name=~\"$service\"}[1m]))",
+              "legendFormat": "{{service_name}}"
+            }
+          ]
+        },
+        {
+          "id": 23,
+          "type": "timeseries",
+          "title": "Taxa de erro 5xx por serviço (OTel)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 70
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "(sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\",service_name=~\"$service\",http_response_status_code=~\"5..\"}[1m])) or 0 * sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\",service_name=~\"$service\"}[1m]))) / (sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\",service_name=~\"$service\"}[1m])) > 0)",
+              "legendFormat": "{{service_name}}"
+            }
+          ]
+        },
+        {
+          "id": 24,
+          "type": "timeseries",
+          "title": "Latência p95 por serviço (OTel)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 70
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le, service_name) (rate(traces_span_metrics_duration_seconds_bucket{span_kind=\"SPAN_KIND_SERVER\",service_name=~\"$service\"}[5m])))",
+              "legendFormat": "{{service_name}}"
+            }
+          ]
+        }
+      ]
+    }

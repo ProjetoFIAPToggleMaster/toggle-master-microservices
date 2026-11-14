@@ -1,0 +1,41 @@
+# ArgoCD Application — Prometheus + Grafana (kube-prometheus-stack)
+#
+# Multi-source: o chart vem do repositório Helm oficial, e o arquivo de
+# valores vem DESTE repositório Git ($values). Assim a configuração da stack
+# de monitoramento é versionada no Git como o resto (GitOps), sem copiar o
+# chart para cá.
+#
+# Aplicar todas as Applications de monitoramento: kubectl apply -f argocd/monitoring/
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-kube-prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 93.2.0
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $values/monitoring/values/kube-prometheus-stack.yaml
+    - repoURL: https://github.com/ProjetoFIAPToggleMaster/toggle-master-microservices.git
+      targetRevision: master
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Os CRDs do Prometheus Operator passam do limite de 256 KB da
+      # anotação last-applied-configuration do apply "client-side".
+      - ServerSideApply=true

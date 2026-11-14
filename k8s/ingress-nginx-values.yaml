@@ -28,3 +28,20 @@ controller:
     requests:
       cpu: 100m
       memory: 128Mi
+
+  # Métricas do controller (nginx_ingress_controller_requests, ...)
+  # coletadas pelo Prometheus. Dão a taxa de requisições e de erros 5xx por
+  # microsserviço sem tocar no código. O ServiceMonitor é um CRD do
+  # kube-prometheus-stack: instale as Applications de argocd/monitoring/
+  # ANTES deste chart (ou rode helm upgrade depois que os CRDs existirem).
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+  extraArgs:
+    # O toggle-ingress não tem "host" (aceita qualquer Host, ex.: o DNS do
+    # NLB). Sem esta flag o controller NÃO gera as métricas por requisição
+    # (nginx_ingress_controller_requests etc.) para hosts "não definidos" —
+    # o painel de requisições ficaria vazio. Descoberto no teste no minikube.
+    metrics-per-undefined-host: "true"
