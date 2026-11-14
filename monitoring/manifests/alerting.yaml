@@ -1,0 +1,187 @@
+# Alertas da Fase 4 — regras, destinos e roteamento do Grafana Alerting, via GitOps.
+#
+# O sidecar do Grafana (sidecar.alerts em monitoring/values/kube-prometheus-stack.yaml)
+# carrega qualquer ConfigMap com o label grafana_alert: "1" como provisioning de
+# alerting e recarrega o Grafana. O Git é a fonte: recursos provisionados ficam
+# bloqueados para edição na UI.
+#
+# Fluxo:
+#   severity=critical      -> Jira Service Management Operations (alerta P1, via API
+#                             compatível com OpsGenie; og_priority define a prioridade)
+#   severity=critical      -> self-healer (abre incidente no JSM; se remediation=restart,
+#                             faz rollout restart do deployment)
+#   critical e warning     -> Discord (aviso para o time)
+#
+# ATENÇÃO: o Grafana expande variáveis de ambiente ($VAR / ${VAR}) nestes arquivos.
+# É assim que os segredos entram (Secret grafana-alerting-secrets, via envFromSecret).
+# Por isso os templates das anotações usam .Labels / .Values, nunca $labels / $value:
+# o "$" seria tratado como variável de ambiente e viraria string vazia.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting-togglemaster
+  namespace: monitoring
+  labels:
+    grafana_alert: "1"
+data:
+  rules.yaml: |
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: toggle-master
+        folder: ToggleMaster
+        interval: 1m
+        rules:
+          # Taxa de 5xx por serviço (span metrics do OTel Collector).
+          # service_name == nome do Deployment, o que permite ao self-healer agir.
+          - uid: tm-high-error-rate
+            title: Taxa de erro 5xx alta
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange: { from: 300, to: 0 }
+                datasourceUid: prometheus
+                model:
+                  refId: A
+                  instant: true
+                  expr: >-
+                    sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind="SPAN_KIND_SERVER",http_response_status_code=~"5.."}[5m]))
+                    / (sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind="SPAN_KIND_SERVER"}[5m])) > 0)
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  refId: C
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: { type: gt, params: [0.05] }
+            for: 2m
+            # Sem 5xx a query não retorna série: isso é saudável, não "sem dados".
+            noDataState: OK
+            execErrState: Error
+            labels:
+              severity: critical
+              og_priority: P1
+              remediation: restart
+            annotations:
+              summary: '{{ .Labels.service_name }} com {{ humanizePercentage (index .Values "A").Value }} de respostas 5xx'
+              description: Mais de 5% das requisições do serviço retornando 5xx por 2 minutos. O self-healer reinicia o deployment.
+              runbook_url: https://github.com/ProjetoFIAPToggleMaster/toggle-master-microservices/blob/master/k8s/RUNBOOK.md
+
+          # Deployment sem nenhuma réplica disponível. Restart não resolve
+          # (imagem quebrada, config errada...): só escala para humano.
+          - uid: tm-deployment-unavailable
+            title: Serviço sem réplicas disponíveis
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange: { from: 300, to: 0 }
+                datasourceUid: prometheus
+                model:
+                  refId: A
+                  instant: true
+                  expr: max by (deployment) (kube_deployment_status_replicas_available{namespace="toggle-master"})
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  refId: C
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: { type: lt, params: [1] }
+            for: 2m
+            noDataState: Alerting
+            execErrState: Error
+            labels:
+              severity: critical
+              og_priority: P1
+            annotations:
+              summary: '{{ .Labels.deployment }} sem réplicas disponíveis'
+              description: Nenhum pod pronto há 2 minutos. Verifique eventos, logs e a última imagem implantada.
+              runbook_url: https://github.com/ProjetoFIAPToggleMaster/toggle-master-microservices/blob/master/k8s/RUNBOOK.md
+
+          # Latência p95 alta: aviso, sem incidente.
+          - uid: tm-high-latency
+            title: Latência p95 alta
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange: { from: 300, to: 0 }
+                datasourceUid: prometheus
+                model:
+                  refId: A
+                  instant: true
+                  expr: histogram_quantile(0.95, sum by (le, service_name) (rate(traces_span_metrics_duration_seconds_bucket{span_kind="SPAN_KIND_SERVER"}[5m])))
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  refId: C
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: { type: gt, params: [1] }
+            for: 5m
+            noDataState: OK
+            execErrState: Error
+            labels:
+              severity: warning
+            annotations:
+              summary: '{{ .Labels.service_name }} com p95 de {{ humanizeDuration (index .Values "A").Value }}'
+              description: Latência p95 acima de 1s por 5 minutos.
+
+  contactpoints.yaml: |
+    apiVersion: 1
+    contactPoints:
+      # Jira Service Management Operations (sucessor do OpsGenie). Mesma API de
+      # alertas: só muda a URL. Para OpsGenie legado: https://api.opsgenie.com/v2/alerts
+      - orgId: 1
+        name: jsm-ops
+        receivers:
+          - uid: tm-jsm-ops
+            type: opsgenie
+            settings:
+              apiKey: ${OPSGENIE_API_KEY}
+              apiUrl: ${OPSGENIE_API_URL}
+              # Fecha o alerta no JSM quando o Grafana resolve.
+              autoClose: true
+              # Usa o label og_priority (P1..P5) como prioridade do alerta.
+              overridePriority: true
+              sendTagsAs: both
+      - orgId: 1
+        name: discord
+        receivers:
+          - uid: tm-discord
+            type: discord
+            settings:
+              url: ${DISCORD_WEBHOOK_URL}
+      - orgId: 1
+        name: self-healer
+        receivers:
+          - uid: tm-self-healer
+            type: webhook
+            settings:
+              url: http://self-healer.monitoring.svc:8080/alert
+              httpMethod: POST
+              authorization_scheme: Bearer
+              authorization_credentials: ${SELF_HEALER_TOKEN}
+
+  policies.yaml: |
+    apiVersion: 1
+    policies:
+      - orgId: 1
+        receiver: discord
+        group_by: [grafana_folder, alertname, service_name, deployment]
+        routes:
+          - receiver: jsm-ops
+            object_matchers: [[severity, "=", critical]]
+            continue: true
+          # Todo critical vai ao self-healer: ele abre o incidente no JSM e, se o
+          # alerta tiver remediation=restart, reinicia o deployment.
+          # Invariante: remediation=restart só em regras severity=critical.
+          - receiver: self-healer
+            object_matchers: [[severity, "=", critical]]
+            # Reenvio enquanto o alerta continuar firing; o self-healer tem cooldown próprio.
+            repeat_interval: 30m
+            continue: true
+          - receiver: discord
+            object_matchers: [[severity, "=~", "critical|warning"]]

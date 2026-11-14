@@ -38,6 +38,13 @@ resources:
   limits:
     memory: 1Gi
 
+# A inicialização passa de 30s (exporter do Datadog + resourcedetection), mais
+# que o liveness padrão tolera (3 falhas x 10s): o pod entrava em CrashLoopBackOff.
+# O startupProbe segura liveness/readiness por até 3 min só na subida.
+startupProbe:
+  periodSeconds: 10
+  failureThreshold: 18
+
 # Credenciais do Datadog vêm do Secret datadog-secret (monitoring/secrets.example.yaml),
 # aplicado manualmente no namespace monitoring antes do sync.
 extraEnvs:
@@ -56,6 +63,10 @@ config:
   receivers:
     jaeger: null
     zipkin: null
+    # Complementa o preset kubeletMetrics: o certificado de serving do kubelet
+    # é self-signed e sem IP SAN (minikube e EKS), e o preset acessa pelo IP do node.
+    kubeletstats:
+      insecure_skip_verify: true
 
   connectors:
     span_metrics:
