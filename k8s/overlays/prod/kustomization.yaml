@@ -20,3 +20,4 @@ resources:
 patches:
   - path: patch-images.yaml
   - path: patch-serviceaccounts.yaml
+  - path: patch-otel.yaml

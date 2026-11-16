@@ -9,6 +9,14 @@ presets:
     enabled: true
   kubernetesAttributes:
     enabled: true
+  # Métricas de infraestrutura (CPU/memória/disco/rede de node, pod e container)
+  # para o Datadog, sem precisar do Datadog Agent. Os presets criam o RBAC
+  # (nodes/stats), o env K8S_NODE_IP e o mount /hostfs. O chart injeta os
+  # receivers só no pipeline "metrics"; o "metrics/datadog" os declara abaixo.
+  kubeletMetrics:
+    enabled: true
+  hostMetrics:
+    enabled: true
 
 service:
   enabled: true
@@ -26,14 +34,39 @@ ports:
 resources:
   requests:
     cpu: 100m
-    memory: 128Mi
+    memory: 256Mi
   limits:
-    memory: 512Mi
+    memory: 1Gi
+
+# A inicialização passa de 30s (exporter do Datadog + resourcedetection), mais
+# que o liveness padrão tolera (3 falhas x 10s): o pod entrava em CrashLoopBackOff.
+# O startupProbe segura liveness/readiness por até 3 min só na subida.
+startupProbe:
+  periodSeconds: 10
+  failureThreshold: 18
+
+# Credenciais do Datadog vêm do Secret datadog-secret (monitoring/secrets.example.yaml),
+# aplicado manualmente no namespace monitoring antes do sync.
+extraEnvs:
+  - name: DD_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: datadog-secret
+        key: DD_API_KEY
+  - name: DD_SITE
+    valueFrom:
+      secretKeyRef:
+        name: datadog-secret
+        key: DD_SITE
 
 config:
   receivers:
     jaeger: null
     zipkin: null
+    # Complementa o preset kubeletMetrics: o certificado de serving do kubelet
+    # é self-signed e sem IP SAN (minikube e EKS), e o preset acessa pelo IP do node.
+    kubeletstats:
+      insecure_skip_verify: true
 
   connectors:
     span_metrics:
@@ -44,8 +77,16 @@ config:
         - name: http.request.method
         - name: http.response.status_code
       metrics_flush_interval: 15s
+    # Gera as métricas de APM (hits, erros, latência) a partir dos spans.
+    # Sem ele a tela de APM do Datadog fica vazia mesmo com traces chegando.
+    datadog/connector: {}
 
   processors:
+    # Hostname correto no Datadog (evita o nome do pod/collector virar "host").
+    resourcedetection:
+      detectors: [env, eks, ec2, system]
+      timeout: 2s
+      override: false
     resource/drop-high-cardinality:
       attributes:
         - action: delete
@@ -60,18 +101,32 @@ config:
         included: ["*"]
     otlp_http/loki:
       endpoint: http://loki.monitoring:3100/otlp
+    datadog:
+      # Sem hostname fixo, o exporter consulta os metadados de nuvem (EC2/GCP/Azure)
+      # na inicialização e trava ~25s, estourando o liveness probe (CrashLoopBackOff).
+      hostname: ${env:K8S_NODE_NAME}
+      api:
+        key: ${env:DD_API_KEY}
+        site: ${env:DD_SITE}
 
   service:
     pipelines:
       traces:
         receivers: [otlp]
-        processors: [memory_limiter, k8s_attributes, batch]
-        exporters: [debug, span_metrics]
+        processors: [memory_limiter, k8s_attributes, resourcedetection, batch]
+        exporters: [datadog, datadog/connector, span_metrics]
+      # Grafana/Prometheus: mantém o drop de UIDs de alta cardinalidade.
       metrics:
         receivers: [otlp, span_metrics, prometheus]
         processors: [memory_limiter, k8s_attributes, resource/drop-high-cardinality, batch]
         exporters: [prometheus_remote_write]
+      # Datadog: sem o drop, pois k8s.pod.uid é usado para correlacionar
+      # traces, logs e containers.
+      metrics/datadog:
+        receivers: [otlp, datadog/connector, prometheus, kubeletstats, hostmetrics]
+        processors: [memory_limiter, k8s_attributes, resourcedetection, batch]
+        exporters: [datadog]
       logs:
         receivers: [otlp]
-        processors: [memory_limiter, k8s_attributes, batch]
-        exporters: [otlp_http/loki]
+        processors: [memory_limiter, k8s_attributes, resourcedetection, batch]
+        exporters: [otlp_http/loki, datadog]

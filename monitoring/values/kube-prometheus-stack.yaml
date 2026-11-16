@@ -103,12 +103,24 @@ grafana:
       label: grafana_dashboard
       labelValue: "1"
       searchNamespace: ALL
+    # Fase 4: regras, contact points e políticas de alerta vêm de ConfigMaps
+    # com o label grafana_alert: "1" (monitoring/manifests/alerting.yaml).
+    alerts:
+      enabled: true
+      label: grafana_alert
+      labelValue: "1"
+      searchNamespace: monitoring
     datasources:
       # O chart cria um datasource "Alertmanager" mesmo com o Alertmanager
       # desligado — ficaria apontando para um serviço que não existe e
       # confundindo a tela de alertas do Grafana (Fase 4).
       alertmanager:
         enabled: false
+
+  # Segredos dos contact points (JSM Operations, Discord, self-healer) como variáveis
+  # de ambiente, expandidas pelo Grafana nos arquivos de provisioning de alerting.
+  # Secret aplicado manualmente antes do sync (monitoring/secrets.example.yaml).
+  envFromSecret: grafana-alerting-secrets
 
   resources:
     requests:

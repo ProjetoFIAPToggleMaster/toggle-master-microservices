@@ -18,7 +18,12 @@ spec:
           image: toggle-master/evaluation-service:latest
           ports:
             - containerPort: 8004
+          envFrom:
+            - configMapRef:
+                name: toggle-config
           env:
+            - name: OTEL_SERVICE_NAME
+              value: "evaluation-service"
             - name: PORT
               value: "8004"
             - name: REDIS_URL

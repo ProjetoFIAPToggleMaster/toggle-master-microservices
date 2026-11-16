@@ -10,3 +10,4 @@ resources:
 patches:
   - path: patch-images.yaml
   - path: patch-analytics-localstack.yaml
+  - path: patch-otel.yaml

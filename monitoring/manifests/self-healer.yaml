@@ -1,0 +1,407 @@
+# Self-healer (Fase 4) — incidente automático + auto-remediação, acionados pelo
+# Grafana Alerting.
+#
+# O Grafana chama POST /alert (contact point "self-healer" em alerting.yaml) para
+# todo alerta severity=critical. Para cada alerta "firing":
+#   1. Abre um incidente no service project do JSM (REST API do Jira Service
+#      Management). Necessário porque o plano Free do JSM não tem o gatilho de
+#      automação "Alert created". Um incidente por alerta (fingerprint) até ele
+#      ser resolvido; o estado é em memória (restart do pod pode duplicar).
+#   2. Se o alerta tiver remediation=restart, faz o equivalente a
+#      `kubectl rollout restart deployment/<svc>` no namespace toggle-master e
+#      registra a ação como alerta P5 no JSM Operations
+#      (alias self-healer-<deployment>, deduplicado por serviço).
+#
+# Proteções:
+#   - Bearer token compartilhado com o Grafana (SELF_HEALER_TOKEN).
+#   - Allowlist de deployments + RBAC restrito a get/patch nesses deployments.
+#   - Cooldown por deployment (evita loop de restart).
+#   - DRY_RUN=true só registra o que faria. Troque para "false" para agir.
+#
+# Sem imagem própria: python:alpine oficial + script deste ConfigMap (só stdlib).
+#
+# Teste manual (em outro terminal: kubectl -n monitoring port-forward svc/self-healer 8080):
+#   TOKEN=$(kubectl -n monitoring get secret grafana-alerting-secrets \
+#     -o jsonpath='{.data.SELF_HEALER_TOKEN}' | base64 -d)
+#   curl -X POST localhost:8080/alert -H "Authorization: Bearer $TOKEN" \
+#     -d '{"alerts":[{"status":"firing","fingerprint":"teste1","labels":{"alertname":"teste","severity":"critical","remediation":"restart","service_name":"flag-service"},"annotations":{"summary":"teste manual"}}]}'
+#   kubectl -n monitoring logs deploy/self-healer
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: self-healer-script
+  namespace: monitoring
+data:
+  self_healer.py: |
+    import base64
+    import hmac
+    import json
+    import logging
+    import os
+    import ssl
+    import threading
+    import time
+    import urllib.request
+    from datetime import datetime, timezone
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    log = logging.getLogger("self-healer")
+
+    NAMESPACE = os.environ["TARGET_NAMESPACE"]
+    ALLOWED = {d.strip() for d in os.environ["ALLOWED_DEPLOYMENTS"].split(",") if d.strip()}
+    DRY_RUN = os.environ.get("DRY_RUN", "true").lower() != "false"
+    COOLDOWN = int(os.environ.get("COOLDOWN_SECONDS", "600"))
+    TOKEN = os.environ["SELF_HEALER_TOKEN"].encode()
+    OPS_API_KEY = os.environ.get("OPSGENIE_API_KEY", "")
+    OPS_API_URL = os.environ.get("OPSGENIE_API_URL", "")
+    # Incidente via REST API do JSM. Sem essas variáveis, a criação fica desligada.
+    JIRA_BASE_URL = os.environ.get("JIRA_BASE_URL", "").rstrip("/")
+    JIRA_SERVICE_DESK_ID = os.environ.get("JIRA_SERVICE_DESK_ID", "")
+    JIRA_REQUEST_TYPE_ID = os.environ.get("JIRA_REQUEST_TYPE_ID", "")
+    JIRA_EMAIL = os.environ.get("JIRA_EMAIL", "")
+    JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN", "")
+    INCIDENTS_ENABLED = all((JIRA_BASE_URL, JIRA_SERVICE_DESK_ID, JIRA_REQUEST_TYPE_ID,
+                             JIRA_EMAIL, JIRA_API_TOKEN))
+    MAX_BODY = 1024 * 1024
+
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    K8S_API = "https://kubernetes.default.svc"
+    K8S_CTX = ssl.create_default_context(cafile=f"{SA_DIR}/ca.crt")
+
+    last_action = {}      # deployment -> instante do último restart (cooldown)
+    open_incidents = {}   # fingerprint do alerta -> chave do incidente no Jira
+    lock = threading.Lock()
+
+
+    def now_iso():
+        return datetime.now(timezone.utc).isoformat()
+
+
+    def rollout_restart(deployment):
+        # Mesmo patch do `kubectl rollout restart`.
+        with open(f"{SA_DIR}/token") as f:
+            sa_token = f.read().strip()
+        body = {"spec": {"template": {"metadata": {"annotations": {
+            "kubectl.kubernetes.io/restartedAt": now_iso()}}}}}
+        req = urllib.request.Request(
+            f"{K8S_API}/apis/apps/v1/namespaces/{NAMESPACE}/deployments/{deployment}",
+            data=json.dumps(body).encode(),
+            method="PATCH",
+            headers={"Authorization": f"Bearer {sa_token}",
+                     "Content-Type": "application/strategic-merge-patch+json"},
+        )
+        urllib.request.urlopen(req, context=K8S_CTX, timeout=10).close()
+
+
+    def ops_record_action(deployment, summary, details):
+        # Alerta informativo (P5) na API compatível com OpsGenie (JSM Operations).
+        # Alias fixo por deployment: ações repetidas incrementam o mesmo alerta.
+        if not (OPS_API_KEY and OPS_API_URL):
+            return
+        body = {"message": summary[:130], "alias": f"self-healer-{deployment}",
+                "description": summary, "source": "self-healer", "priority": "P5",
+                "tags": ["self-healer", deployment],
+                "details": {k: str(v) for k, v in details.items()}}
+        req = urllib.request.Request(
+            OPS_API_URL, data=json.dumps(body).encode(), method="POST",
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"GenieKey {OPS_API_KEY}"})
+        try:
+            urllib.request.urlopen(req, timeout=10).close()
+        except Exception as exc:  # registro no JSM é best-effort
+            log.warning("falha ao registrar ação no JSM Operations: %s", exc)
+
+
+    def create_incident(alert, fingerprint):
+        # Um incidente por alerta até o Grafana mandar "resolved". O placeholder
+        # reservado no lock evita duplicata quando o Grafana reenvia em paralelo.
+        with lock:
+            if fingerprint in open_incidents:
+                return
+            open_incidents[fingerprint] = "criando"
+        labels = alert.get("labels") or {}
+        annotations = alert.get("annotations") or {}
+        alertname = labels.get("alertname", "?")
+        summary = f"[{alertname}] {annotations.get('summary') or alertname}"[:255]
+        description = "\n".join([
+            annotations.get("description", ""),
+            "",
+            f"Início: {alert.get('startsAt', '?')}",
+            f"Alerta no Grafana: {alert.get('generatorURL', '-')}",
+            f"Runbook: {annotations.get('runbook_url', '-')}",
+            "Labels: " + ", ".join(f"{k}={v}" for k, v in sorted(labels.items())),
+            "",
+            "Criado automaticamente pelo self-healer (Grafana Alerting).",
+        ])
+        body = {"serviceDeskId": JIRA_SERVICE_DESK_ID, "requestTypeId": JIRA_REQUEST_TYPE_ID,
+                "requestFieldValues": {"summary": summary, "description": description}}
+        auth = base64.b64encode(f"{JIRA_EMAIL}:{JIRA_API_TOKEN}".encode()).decode()
+        req = urllib.request.Request(
+            f"{JIRA_BASE_URL}/rest/servicedeskapi/request",
+            data=json.dumps(body).encode(), method="POST",
+            headers={"Content-Type": "application/json", "Accept": "application/json",
+                     "Authorization": f"Basic {auth}"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                key = json.load(resp).get("issueKey", "?")
+        except Exception:
+            with lock:  # libera para o próximo reenvio tentar de novo
+                open_incidents.pop(fingerprint, None)
+            raise
+        with lock:
+            open_incidents[fingerprint] = key
+        log.info("incidente %s criado para o alerta %s", key, alertname)
+
+
+    def handle_alert(alert):
+        labels = alert.get("labels") or {}
+        status = alert.get("status")
+        fingerprint = alert.get("fingerprint") or json.dumps(labels, sort_keys=True)
+
+        if status == "resolved":
+            with lock:
+                key = open_incidents.pop(fingerprint, None)
+            if key:
+                log.info("alerta %s resolvido (incidente %s segue aberto para análise)",
+                         labels.get("alertname", "?"), key)
+            return
+        if status != "firing":
+            return
+
+        if INCIDENTS_ENABLED and labels.get("severity") == "critical":
+            create_incident(alert, fingerprint)
+        if labels.get("remediation") == "restart":
+            remediate(alert)
+
+
+    def remediate(alert):
+        labels = alert.get("labels") or {}
+        alertname = labels.get("alertname", "?")
+        deployment = labels.get("deployment") or labels.get("service_name")
+        if deployment not in ALLOWED:
+            log.warning("ignorado: deployment %r fora da allowlist (alerta %s)", deployment, alertname)
+            return
+
+        with lock:
+            now = time.monotonic()
+            last = last_action.get(deployment)
+            if last is not None and now - last < COOLDOWN:
+                log.info("cooldown: %s reiniciado há %ds, ignorando %s", deployment, now - last, alertname)
+                return
+            last_action[deployment] = now
+
+        if DRY_RUN:
+            action = "dry-run (nenhuma ação)"
+            log.info("[dry-run] faria rollout restart de %s/%s (alerta %s)", NAMESPACE, deployment, alertname)
+        else:
+            try:
+                rollout_restart(deployment)
+            except Exception:
+                with lock:  # libera o cooldown para a próxima tentativa
+                    last_action.pop(deployment, None)
+                raise
+            action = "rollout restart"
+            log.info("rollout restart de %s/%s (alerta %s)", NAMESPACE, deployment, alertname)
+
+        ops_record_action(
+            deployment,
+            f"self-healer: {action} em deployment/{deployment}",
+            {"alertname": alertname, "namespace": NAMESPACE, "deployment": deployment,
+             "dry_run": DRY_RUN, "summary": (alert.get("annotations") or {}).get("summary", "")})
+
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self._reply(200 if self.path == "/health" else 404)
+
+        def do_POST(self):
+            if self.path != "/alert":
+                return self._reply(404)
+            auth = self.headers.get("Authorization", "").encode()
+            if not hmac.compare_digest(auth, b"Bearer " + TOKEN):
+                return self._reply(401)
+            length = int(self.headers.get("Content-Length") or 0)
+            if length <= 0 or length > MAX_BODY:
+                return self._reply(413 if length > MAX_BODY else 400)
+            try:
+                payload = json.loads(self.rfile.read(length))
+                alerts = payload.get("alerts") or []
+            except (ValueError, AttributeError):
+                return self._reply(400)
+            failed = False
+            for alert in alerts:
+                try:
+                    handle_alert(alert)
+                except Exception:
+                    log.exception("falha ao remediar alerta %s", (alert.get("labels") or {}).get("alertname"))
+                    failed = True
+            self._reply(500 if failed else 200)
+
+        def _reply(self, code):
+            self.send_response(code)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, fmt, *args):  # acesso só em debug; /health poluiria o log
+            log.debug(fmt, *args)
+
+
+    if __name__ == "__main__":
+        log.info("self-healer iniciado: namespace=%s dry_run=%s cooldown=%ss incidentes=%s allowlist=%s",
+                 NAMESPACE, DRY_RUN, COOLDOWN, INCIDENTS_ENABLED, sorted(ALLOWED))
+        ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: self-healer
+  namespace: monitoring
+---
+# Permissão só no namespace da aplicação e só nos deployments da allowlist.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: self-healer
+  namespace: toggle-master
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames:
+      - auth-service
+      - flag-service
+      - targeting-service
+      - evaluation-service
+      - analytics-service
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: self-healer
+  namespace: toggle-master
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: self-healer
+subjects:
+  - kind: ServiceAccount
+    name: self-healer
+    namespace: monitoring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: self-healer
+  namespace: monitoring
+  labels:
+    app: self-healer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: self-healer
+  template:
+    metadata:
+      labels:
+        app: self-healer
+    spec:
+      serviceAccountName: self-healer
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: self-healer
+          image: python:3.12.8-alpine3.21
+          command: ["python", "-u", "/app/self_healer.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: TARGET_NAMESPACE
+              value: toggle-master
+            # Manter em sincronia com resourceNames da Role acima.
+            - name: ALLOWED_DEPLOYMENTS
+              value: auth-service,flag-service,targeting-service,evaluation-service,analytics-service
+            - name: DRY_RUN
+              value: "false"
+            - name: COOLDOWN_SECONDS
+              value: "600"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: SELF_HEALER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-alerting-secrets
+                  key: SELF_HEALER_TOKEN
+            # Incidente automático no JSM (ids: veja monitoring/secrets.example.yaml).
+            - name: JIRA_BASE_URL
+              value: https://toggle-master.atlassian.net
+            - name: JIRA_SERVICE_DESK_ID
+              value: "1"
+            - name: JIRA_REQUEST_TYPE_ID
+              value: "8"
+            # Credenciais em Secret separado: o Grafana (envFromSecret) não precisa delas.
+            - name: JIRA_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: self-healer-secrets
+                  key: JIRA_EMAIL
+            - name: JIRA_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: self-healer-secrets
+                  key: JIRA_API_TOKEN
+            - name: OPSGENIE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-alerting-secrets
+                  key: OPSGENIE_API_KEY
+            - name: OPSGENIE_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-alerting-secrets
+                  key: OPSGENIE_API_URL
+          volumeMounts:
+            - name: script
+              mountPath: /app
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: script
+          configMap:
+            name: self-healer-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: self-healer
+  namespace: monitoring
+spec:
+  selector:
+    app: self-healer
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
