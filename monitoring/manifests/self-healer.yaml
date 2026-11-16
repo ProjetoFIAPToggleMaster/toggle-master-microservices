@@ -341,9 +341,9 @@ spec:
             - name: JIRA_BASE_URL
               value: https://toggle-master.atlassian.net
             - name: JIRA_SERVICE_DESK_ID
-              value: "1"  # preencher
+              value: "1"
             - name: JIRA_REQUEST_TYPE_ID
-              value: "8"  # preencher
+              value: "8"
             # Credenciais em Secret separado: o Grafana (envFromSecret) não precisa delas.
             - name: JIRA_EMAIL
               valueFrom:
