@@ -147,7 +147,7 @@ variable "ecr_max_image_count" {
 variable "kubernetes_version" {
   description = "Versão do Kubernetes do control plane."
   type        = string
-  default     = "1.31"
+  default     = "1.34"
 }
 
 variable "node_instance_types" {
